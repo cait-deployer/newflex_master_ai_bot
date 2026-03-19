@@ -63,8 +63,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <>
       <TooltipProvider delayDuration={200}>
         <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex">
-
-          {/* Mobile backdrop */}
           {mobileOpen && (
             <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
           )}
