@@ -209,21 +209,14 @@ export function ProviderForm({ mode, initialData, onSubmit, onCancel, saving }: 
                 onLocationSelected={handleLocationSelected}
                 defaultLat={form.latitude}
                 defaultLng={form.longitude}
+                defaultAddress={
+                  form.address
+                    ? [form.address, form.address_line_2].filter(Boolean).join(", ")
+                    : ""
+                }
               />
               {errors.address && <p className="text-xs text-destructive">{errors.address}</p>}
             </div>
-
-            {/* Address Line 2 */}
-            {/* <div className="sm:col-span-2 space-y-1.5">
-                <Label className="text-sm font-medium">Additional Address</Label>
-              <GoogleLocationPicker
-                onLocationSelected={handleLocationSelected}
-                onLine2Changed={(val) => set("address_line_2", val)}
-                defaultLat={form.latitude}
-                defaultLng={form.longitude}
-                line2Value={form.address_line_2}
-              />
-            </div> */}
 
             <Field label="City *" error={errors.city}>
               <Input placeholder="Dallas" value={form.city ?? ""}

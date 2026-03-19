@@ -15,11 +15,13 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import {
   Users, Plus, Search, RefreshCw, Loader2,
-  AlertCircle, LayoutGrid, Table2,
+  AlertCircle, LayoutGrid, Table2, FileSpreadsheet,
+  Trash2, X, CheckSquare,
 } from "lucide-react"
 import { ProviderCard } from "./provider-card"
 import { ProviderTable } from "./provider-table"
 import { ProviderForm } from "./provider-form"
+import { ImportProvidersDialog } from "./import-providers-dialog"
 import PaginationComponent from "@/components/shared/pagination-component"
 
 export type Provider = {
@@ -67,29 +69,34 @@ export default function ProvidersPage() {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("cards")
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  // ── Bulk selection ─────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [importOpen, setImportOpen] = useState(false)
 
   const fetchProviders = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
       const res = await fetch("/api/admin/providers")
       if (!res.ok) throw new Error("Failed to fetch providers")
       const data = await res.json()
       setProviders(data.providers ?? [])
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (e: any) { setError(e.message) }
+    finally { setLoading(false) }
   }, [])
 
   useEffect(() => { fetchProviders() }, [fetchProviders])
   useEffect(() => { setCurrentPage(1) }, [search, itemsPerPage])
+  // Clear selection when page / search changes
+  useEffect(() => { setSelectedIds(new Set()) }, [search, currentPage, itemsPerPage])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -101,7 +108,6 @@ export default function ProvidersPage() {
   }, [search, providers])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage))
-
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage
     return filtered.slice(start, start + itemsPerPage)
@@ -111,52 +117,49 @@ export default function ProvidersPage() {
     if (page >= 1 && page <= totalPages) setCurrentPage(page)
   }
 
-  // ── CRUD handlers ──────────────────────────────────────────────────────────
+  // ── Selection helpers ──────────────────────────────────────────────────────
+  const pageIds = useMemo(() => paginated.map((p) => p.id), [paginated])
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id))
+  const somePageSelected = pageIds.some((id) => selectedIds.has(id))
 
+  const toggleOne = (id: number) =>
+    setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const togglePage = () => {
+    if (allPageSelected) {
+      setSelectedIds((prev) => { const n = new Set(prev); pageIds.forEach((id) => n.delete(id)); return n })
+    } else {
+      setSelectedIds((prev) => new Set([...prev, ...pageIds]))
+    }
+  }
+
+  const selectAll = () => setSelectedIds(new Set(filtered.map((p) => p.id)))
+  const clearSelect = () => setSelectedIds(new Set())
+
+  // ── CRUD ───────────────────────────────────────────────────────────────────
   const handleCreate = async (data: Omit<Provider, "id" | "created_at">) => {
     setSaving(true)
     try {
-      const res = await fetch("/api/admin/providers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      })
+      const res = await fetch("/api/admin/providers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Failed to create provider")
-      await fetchProviders()
-      setViewMode("list")
-      toast({
-        title: "Provider created",
-        description: `${data.provider_name} has been added successfully.`,
-        variant: "success"
-      })
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
-    } finally {
-      setSaving(false)
-    }
+      await fetchProviders(); setViewMode("list")
+      toast({ title: "Provider created", description: `${data.provider_name} has been added successfully.`, variant: "success" })
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }) }
+    finally { setSaving(false) }
   }
 
   const handleUpdate = async (data: Omit<Provider, "id" | "created_at">) => {
     if (!editingProvider) return
     setSaving(true)
     try {
-      const res = await fetch("/api/admin/providers", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, id: editingProvider.id }),
-      })
+      const res = await fetch("/api/admin/providers", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...data, id: editingProvider.id }) })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Failed to update provider")
-      await fetchProviders()
-      setViewMode("list")
-      setEditingProvider(null)
+      await fetchProviders(); setViewMode("list"); setEditingProvider(null)
       toast({ title: "Provider updated", description: `${data.provider_name} has been saved.`, variant: "success" })
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
-    } finally {
-      setSaving(false)
-    }
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }) }
+    finally { setSaving(false) }
   }
 
   const handleDelete = async () => {
@@ -167,6 +170,7 @@ export default function ProvidersPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? "Failed to delete provider")
       setProviders((prev) => prev.filter((p) => p.id !== deletingId))
+      setSelectedIds((prev) => { const n = new Set(prev); n.delete(deletingId); return n })
       setDeletingId(null)
       if (paginated.length === 1 && currentPage > 1) setCurrentPage((p) => p - 1)
       toast({ title: "Provider deleted", description: `${name} has been removed.`, variant: "success" })
@@ -176,6 +180,33 @@ export default function ProvidersPage() {
     }
   }
 
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds]
+    setBulkDeleting(true)
+    try {
+      const res = await fetch("/api/admin/providers/bulk-delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete providers")
+      setProviders((prev) => prev.filter((p) => !selectedIds.has(p.id)))
+      const remaining = filtered.length - ids.length
+      const maxPage = Math.max(1, Math.ceil(remaining / itemsPerPage))
+      if (currentPage > maxPage) setCurrentPage(maxPage)
+      setSelectedIds(new Set())
+      setBulkDeleteOpen(false)
+      toast({ title: `${ids.length} provider${ids.length !== 1 ? "s" : ""} deleted`, description: "Selected providers have been permanently removed.", variant: "success" })
+    } catch (e: any) { toast({ title: "Failed to delete", description: e.message, variant: "destructive" }) }
+    finally { setBulkDeleting(false) }
+  }
+
+  const handleImportSuccess = useCallback(async () => {
+    await fetchProviders()
+    toast({ title: "Import complete", description: "Providers have been imported successfully.", variant: "success" })
+  }, [fetchProviders, toast])
+
   const openEdit = (p: Provider) => { setEditingProvider(p); setViewMode("edit") }
   const handleBack = () => { setViewMode("list"); setEditingProvider(null) }
 
@@ -184,83 +215,59 @@ export default function ProvidersPage() {
   if (viewMode === "edit" && editingProvider)
     return <ProviderForm mode="edit" initialData={editingProvider} onSubmit={handleUpdate} onCancel={handleBack} saving={saving} />
 
-  // const acceptingCount = providers.filter((p) => p.accepting_patients !== false).length
   const telemedCount = providers.filter((p) => p.telemed).length
   const inPersonCount = providers.filter((p) => p.in_person).length
   const from = filtered.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1
   const to = Math.min(currentPage * itemsPerPage, filtered.length)
 
+  // Names preview for bulk confirm dialog (max 5)
+  const bulkNames = providers.filter((p) => selectedIds.has(p.id)).slice(0, 5).map((p) => p.provider_name)
+  const bulkExtra = selectedIds.size > 5 ? selectedIds.size - 5 : 0
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b-2">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-start gap-4">
           <div className="p-3 bg-primary/10 rounded-xl shrink-0">
             <Users className="w-10 h-10 text-primary" />
           </div>
           <div>
             <h1 className="text-4xl font-bold tracking-tight">Providers</h1>
-            <p className="text-lg text-muted-foreground mt-1">
-              Manage medical providers available in the chat search.
-            </p>
+            <p className="text-lg text-muted-foreground mt-1">Manage medical providers available in the chat search.</p>
           </div>
         </div>
-        <Button onClick={() => setViewMode("create")} size="lg" className="gap-2 shrink-0">
-          <Plus className="w-5 h-5" /> Add Provider
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="lg" className="gap-2" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="w-5 h-5" /> Import Excel
+          </Button>
+          <Button onClick={() => setViewMode("create")} size="lg" className="gap-2">
+            <Plus className="w-5 h-5" /> Add Provider
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
       <div className="flex flex-wrap gap-2">
-        <Badge variant="secondary" className="px-3 py-1.5 text-sm rounded-lg font-medium">
-          {providers.length} total
-        </Badge>
-        {/* <Badge className="px-3 py-1.5 text-sm rounded-lg bg-green-100 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">
-          {acceptingCount} accepting
-        </Badge> */}
-        <Badge className="px-3 py-1.5 text-sm rounded-lg bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800">
-          {telemedCount} telemed
-        </Badge>
-        <Badge className="px-3 py-1.5 text-sm rounded-lg bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800">
-          {inPersonCount} in-person
-        </Badge>
-        {search && (
-          <Badge variant="outline" className="px-3 py-1.5 text-sm rounded-lg">
-            {filtered.length} found
-          </Badge>
-        )}
+        <Badge variant="secondary" className="px-3 py-1.5 text-sm rounded-lg font-medium">{providers.length} total</Badge>
+        <Badge className="px-3 py-1.5 text-sm rounded-lg bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800">{telemedCount} telemed</Badge>
+        <Badge className="px-3 py-1.5 text-sm rounded-lg bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800">{inPersonCount} in-person</Badge>
+        {search && <Badge variant="outline" className="px-3 py-1.5 text-sm rounded-lg">{filtered.length} found</Badge>}
       </div>
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, doctor, specialty, city, modality…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+          <Input placeholder="Search by name, doctor, specialty, city, modality…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-2 shrink-0">
           <div className="hidden sm:flex rounded-lg border border-border overflow-hidden">
-            <Button
-              variant={displayMode === "cards" ? "secondary" : "ghost"}
-              size="sm"
-              className="rounded-none h-10 px-3 gap-1.5 border-r border-border"
-              onClick={() => setDisplayMode("cards")}
-            >
-              <LayoutGrid className="w-4 h-4" />
-              <span className="hidden md:inline">Cards</span>
+            <Button variant={displayMode === "cards" ? "secondary" : "ghost"} size="sm" className="rounded-none h-10 px-3 gap-1.5 border-r border-border" onClick={() => setDisplayMode("cards")}>
+              <LayoutGrid className="w-4 h-4" /><span className="hidden md:inline">Cards</span>
             </Button>
-            <Button
-              variant={displayMode === "table" ? "secondary" : "ghost"}
-              size="sm"
-              className="rounded-none h-10 px-3 gap-1.5"
-              onClick={() => setDisplayMode("table")}
-            >
-              <Table2 className="w-4 h-4" />
-              <span className="hidden md:inline">Table</span>
+            <Button variant={displayMode === "table" ? "secondary" : "ghost"} size="sm" className="rounded-none h-10 px-3 gap-1.5" onClick={() => setDisplayMode("table")}>
+              <Table2 className="w-4 h-4" /><span className="hidden md:inline">Table</span>
             </Button>
           </div>
           <Button variant="outline" onClick={fetchProviders} disabled={loading} className="gap-2 h-10">
@@ -283,8 +290,7 @@ export default function ProvidersPage() {
       {loading && !error && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-64 rounded-xl bg-muted/50 animate-pulse"
-              style={{ animationDelay: `${i * 70}ms` }} />
+            <div key={i} className="h-64 rounded-xl bg-muted/50 animate-pulse" style={{ animationDelay: `${i * 70}ms` }} />
           ))}
         </div>
       )}
@@ -292,30 +298,64 @@ export default function ProvidersPage() {
       {/* Empty */}
       {!loading && !error && filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
-          <div className="p-5 bg-muted/50 rounded-2xl">
-            <Users className="w-12 h-12 text-muted-foreground/40" />
-          </div>
+          <div className="p-5 bg-muted/50 rounded-2xl"><Users className="w-12 h-12 text-muted-foreground/40" /></div>
           <div>
             <p className="text-lg font-semibold">{search ? "No providers match" : "No providers yet"}</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {search ? "Try different keywords." : "Click «Add Provider» to get started."}
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">{search ? "Try different keywords." : "Click «Add Provider» to get started."}</p>
           </div>
           {!search && (
-            <Button onClick={() => setViewMode("create")} className="gap-2 mt-2">
-              <Plus className="w-4 h-4" /> Add Provider
-            </Button>
+            <div className="flex gap-2 mt-2">
+              <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2"><FileSpreadsheet className="w-4 h-4" /> Import Excel</Button>
+              <Button onClick={() => setViewMode("create")} className="gap-2"><Plus className="w-4 h-4" /> Add Provider</Button>
+            </div>
           )}
         </div>
       )}
 
       {/* Content */}
       {!loading && !error && filtered.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-3">
+
+          {/* ── Floating bulk action bar ────────────────────────────────── */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-primary/5 border border-primary/20 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="flex items-center gap-3 min-w-0 flex-wrap">
+                <div className="flex items-center gap-2 shrink-0">
+                  <CheckSquare className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold text-primary whitespace-nowrap">
+                    {selectedIds.size} selected
+                  </span>
+                </div>
+                <div className="hidden sm:block w-px h-4 bg-border" />
+                {selectedIds.size < filtered.length ? (
+                  <button onClick={selectAll} className="text-xs text-primary hover:underline underline-offset-2 whitespace-nowrap">
+                    Select all {filtered.length}
+                  </button>
+                ) : (
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">All {filtered.length} selected</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={clearSelect}>
+                  <X className="w-3.5 h-3.5" /><span className="hidden sm:inline">Clear</span>
+                </Button>
+                <Button variant="destructive" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Mobile — always cards */}
           <div className="sm:hidden grid gap-4">
             {paginated.map((p) => (
-              <ProviderCard key={p.id} provider={p} onEdit={() => openEdit(p)} onDelete={() => setDeletingId(p.id)} />
+              <ProviderCard
+                key={p.id} provider={p}
+                selected={selectedIds.has(p.id)}
+                onSelect={() => toggleOne(p.id)}
+                onEdit={() => openEdit(p)}
+                onDelete={() => setDeletingId(p.id)}
+              />
             ))}
           </div>
 
@@ -324,11 +364,26 @@ export default function ProvidersPage() {
             {displayMode === "cards" ? (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {paginated.map((p) => (
-                  <ProviderCard key={p.id} provider={p} onEdit={() => openEdit(p)} onDelete={() => setDeletingId(p.id)} />
+                  <ProviderCard
+                    key={p.id} provider={p}
+                    selected={selectedIds.has(p.id)}
+                    onSelect={() => toggleOne(p.id)}
+                    onEdit={() => openEdit(p)}
+                    onDelete={() => setDeletingId(p.id)}
+                  />
                 ))}
               </div>
             ) : (
-              <ProviderTable providers={paginated} onEdit={openEdit} onDelete={(id) => setDeletingId(id)} />
+              <ProviderTable
+                providers={paginated}
+                selectedIds={selectedIds}
+                allPageSelected={allPageSelected}
+                somePageSelected={somePageSelected}
+                onToggleOne={toggleOne}
+                onTogglePage={togglePage}
+                onEdit={openEdit}
+                onDelete={(id) => setDeletingId(id)}
+              />
             )}
           </div>
 
@@ -336,39 +391,30 @@ export default function ProvidersPage() {
           <div className="mt-2 rounded-xl border border-border bg-muted/20 px-4 py-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground text-center sm:text-left">
-                Showing{" "}
-                <span className="font-semibold text-foreground">{from}–{to}</span>
-                {" "}of{" "}
-                <span className="font-semibold text-foreground">{filtered.length}</span>
-                {" "}providers
+                Showing <span className="font-semibold text-foreground">{from}–{to}</span> of <span className="font-semibold text-foreground">{filtered.length}</span> providers
               </p>
               <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground whitespace-nowrap">Per page</span>
                   <Select value={String(itemsPerPage)} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1) }}>
-                    <SelectTrigger className="h-8 w-[70px] text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="h-8 w-[70px] text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {PER_PAGE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt} value={String(opt)}>{opt}</SelectItem>
-                      ))}
+                      {PER_PAGE_OPTIONS.map((opt) => <SelectItem key={opt} value={String(opt)}>{opt}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="hidden sm:block w-px h-5 bg-border" />
-                <PaginationComponent
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={handlePageChange}
-                />
+                <PaginationComponent currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete confirm */}
+      {/* Import Dialog */}
+      <ImportProvidersDialog open={importOpen} onClose={() => setImportOpen(false)} onSuccess={handleImportSuccess} />
+
+      {/* Single delete confirm */}
       <AlertDialog open={!!deletingId} onOpenChange={(open) => { if (!open) setDeletingId(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -379,8 +425,53 @@ export default function ProvidersPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
-              Delete
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk delete confirm */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open && !bulkDeleting) setBulkDeleteOpen(false) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <span className="p-1.5 bg-destructive/10 rounded-lg">
+                <Trash2 className="w-4 h-4 text-destructive" />
+              </span>
+              Delete {selectedIds.size} Provider{selectedIds.size !== 1 ? "s" : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 pt-1">
+                <p className="text-sm text-muted-foreground">
+                  This action cannot be undone. The following providers will be permanently removed from the database and chat search:
+                </p>
+                <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 space-y-1.5 max-h-40 overflow-y-auto">
+                  {bulkNames.map((name) => (
+                    <div key={name} className="flex items-center gap-2 text-sm text-foreground">
+                      <span className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0" />
+                      <span className="truncate">{name}</span>
+                    </div>
+                  ))}
+                  {bulkExtra > 0 && (
+                    <div className="text-xs text-muted-foreground pt-0.5 pl-3.5">
+                      …and {bulkExtra} more provider{bulkExtra !== 1 ? "s" : ""}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="bg-destructive hover:bg-destructive/90 gap-2 min-w-[120px]"
+            >
+              {bulkDeleting
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Deleting…</>
+                : <><Trash2 className="w-4 h-4" /> Delete {selectedIds.size}</>
+              }
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

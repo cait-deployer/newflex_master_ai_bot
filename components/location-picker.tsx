@@ -22,6 +22,7 @@ type Props = {
   onLine2Changed?: (value: string) => void
   defaultLat?: number
   defaultLng?: number
+  defaultAddress?: string   // pre-fill search input when editing
   line2Value?: string
 }
 
@@ -35,6 +36,7 @@ export function GoogleLocationPicker({
   onLine2Changed,
   defaultLat,
   defaultLng,
+  defaultAddress = "",
   line2Value = "",
 }: Props) {
   const { isLoaded } = useJsApiLoader({
@@ -42,6 +44,7 @@ export function GoogleLocationPicker({
     libraries: LIBRARIES,
   })
 
+  const [addressInput, setAddressInput] = useState(defaultAddress)
   const [marker1, setMarker1] = useState<{ lat: number; lng: number } | null>(
     defaultLat && defaultLng ? { lat: defaultLat, lng: defaultLng } : null
   )
@@ -80,6 +83,7 @@ export function GoogleLocationPicker({
   const reverseMain = useCallback((lat: number, lng: number) => {
     new google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
       if (status === "OK" && results?.[0]) {
+        setAddressInput(results[0].formatted_address)
         onLocationSelected(parseComponents(results[0].address_components, lat, lng, results[0].formatted_address))
         setConfirmed(true)
       }
@@ -106,10 +110,11 @@ export function GoogleLocationPicker({
     setCenter({ lat, lng })
     setZoom(16)
     setConfirmed(true)
+    setAddressInput(place.formatted_address ?? "")
     onLocationSelected(parseComponents(place.address_components ?? [], lat, lng, place.formatted_address ?? ""))
   }, [parseComponents, onLocationSelected])
 
-  // ── Autocomplete 2 → marker 2 (does NOT move map center) ─────────────────
+  // Autocomplete 2 → marker 2 (does NOT move map center)
   const onPlace2Changed = useCallback(() => {
     const place = ac2Ref.current?.getPlace()
     if (!place?.geometry?.location) return
@@ -121,7 +126,7 @@ export function GoogleLocationPicker({
     onLine2Changed?.(addr)
   }, [onLine2Changed])
 
-  // ── Map click → moves marker 1 ────────────────────────────────────────────
+  // Map click → moves marker 1
   const onMapClick = useCallback((e: google.maps.MapMouseEvent) => {
     if (!e.latLng) return
     const lat = e.latLng.lat()
@@ -130,7 +135,7 @@ export function GoogleLocationPicker({
     reverseMain(lat, lng)
   }, [reverseMain])
 
-  // ── Drags ─────────────────────────────────────────────────────────────────
+  // Drags
   const onDrag1End = useCallback((e: google.maps.MapMouseEvent) => {
     if (!e.latLng) return
     const lat = e.latLng.lat(); const lng = e.latLng.lng()
@@ -156,7 +161,7 @@ export function GoogleLocationPicker({
   return (
     <div className="space-y-3">
 
-      {/* ── Main address search ── */}
+      {/* Main address search */}
       <Autocomplete
         onLoad={(ac) => { ac1Ref.current = ac }}
         onPlaceChanged={onPlace1Changed}
@@ -167,6 +172,8 @@ export function GoogleLocationPicker({
           <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
           <input
             type="text"
+            value={addressInput}
+            onChange={(e) => setAddressInput(e.target.value)}
             placeholder="Search main address…"
             autoComplete="off"
             className={cn(
@@ -180,7 +187,7 @@ export function GoogleLocationPicker({
         </div>
       </Autocomplete>
 
-      {/* ── ONE map with both markers ── */}
+      {/* ONE map with both markers */}
       <div className="relative w-full h-[280px] rounded-xl border border-border overflow-hidden">
         <GoogleMap
           mapContainerStyle={{ width: "100%", height: "100%" }}
@@ -240,7 +247,7 @@ export function GoogleLocationPicker({
         )}
       </div>
 
-      {/* ── Address Line 2 — autocomplete input, below the map ── */}
+      {/* Address Line 2 — autocomplete input, below the map */}
       <Autocomplete
         onLoad={(ac) => { ac2Ref.current = ac }}
         onPlaceChanged={onPlace2Changed}

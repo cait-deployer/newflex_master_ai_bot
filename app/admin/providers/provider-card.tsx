@@ -3,27 +3,39 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   MapPin, Phone, Mail, Pencil, Trash2,
-  Stethoscope, Globe, User, Monitor, Building2,
-  CheckCircle2, XCircle, Zap, Users,
+  Stethoscope, Globe, User, Monitor, Building2, Zap, Users,
 } from "lucide-react"
 import type { Provider } from "./page"
 
-type Props = { provider: Provider; onEdit: () => void; onDelete: () => void }
+type Props = {
+  provider: Provider
+  selected: boolean
+  onSelect: () => void
+  onEdit: () => void
+  onDelete: () => void
+}
 
-export function ProviderCard({ provider, onEdit, onDelete }: Props) {
+export function ProviderCard({ provider, selected, onSelect, onEdit, onDelete }: Props) {
   const location = [provider.city, provider.state].filter(Boolean).join(", ")
   const modalities = provider.modality ?? []
   const hasLogo = !!provider.logo_url
 
   return (
-    <Card className="group !p-0 gap-3 flex flex-col hover:border-primary/40 hover:shadow-md transition-all duration-200 overflow-hidden">
-      {/* Top accent bar based on specialty */}
-      <div className="h-1 w-full bg-gradient-to-r from-primary/60 via-primary/30 to-transparent" />
+    <Card className={`
+      group !p-0 gap-3 flex flex-col transition-all duration-200 overflow-hidden
+      ${selected
+        ? "border-primary/60 shadow-md ring-2 ring-primary/20"
+        : "hover:border-primary/40 hover:shadow-md"
+      }
+    `}>
+      {/* Top accent bar */}
+      <div className={`h-1 w-full transition-all duration-200 ${selected ? "bg-primary" : "bg-gradient-to-r from-primary/60 via-primary/30 to-transparent"}`} />
 
-      <CardContent className="flex-1 pt-4 pb-3 space-y-3">
-        {/* Header row */}
+      <CardContent className="flex-1 pt-3 pb-3 space-y-3">
+        {/* Header row — name + checkbox */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             {hasLogo ? (
@@ -46,10 +58,18 @@ export function ProviderCard({ provider, onEdit, onDelete }: Props) {
             </div>
           </div>
 
-          {/* Status badges */}
-          {/* <div className="flex flex-col gap-1 shrink-0">
-            <StatusBadge active={provider.accepting_patients !== false} activeLabel="Open" inactiveLabel="Closed" />
-          </div> */}
+          {/* Checkbox — always visible, larger hit area */}
+          <div
+            className="shrink-0 -mt-0.5 -mr-0.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => onSelect()}
+              aria-label={`Select ${provider.provider_name}`}
+              className="w-5 h-5 rounded cursor-pointer"
+            />
+          </div>
         </div>
 
         {/* Doctor name */}
@@ -65,8 +85,12 @@ export function ProviderCard({ provider, onEdit, onDelete }: Props) {
           <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
             <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <div className="min-w-0">
-              {provider.address && <p className="truncate">{provider.address}{provider.address_line_2 ? `, ${provider.address_line_2}` : ""}</p>}
-              {location && <p className="truncate">{location}{provider.zip_code ? ` ${provider.zip_code}` : ""}</p>}
+              {provider.address && (
+                <p className="truncate">{provider.address}{provider.address_line_2 ? `, ${provider.address_line_2}` : ""}</p>
+              )}
+              {location && (
+                <p className="truncate">{location}{provider.zip_code ? ` ${provider.zip_code}` : ""}</p>
+              )}
             </div>
           </div>
         )}
@@ -127,25 +151,20 @@ export function ProviderCard({ provider, onEdit, onDelete }: Props) {
         {modalities.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {modalities.map((m) => (
-              <Badge key={m} variant="secondary" className="text-[11px] px-2 py-0 h-5 rounded-md font-normal">
-                {m}
-              </Badge>
+              <Badge key={m} variant="secondary" className="text-[11px] px-2 py-0 h-5 rounded-md font-normal">{m}</Badge>
             ))}
           </div>
         )}
 
         {/* Languages */}
         {provider.languages && provider.languages.length > 0 && (
-          <p className="text-[11px] text-muted-foreground">
-            🌐 {provider.languages.join(", ")}
-          </p>
+          <p className="text-[11px] text-muted-foreground">🌐 {provider.languages.join(", ")}</p>
         )}
       </CardContent>
 
       <CardFooter className="pt-2 pb-3 px-4 flex gap-2 border-t border-border/50 bg-muted/20">
         <Button
-          variant="ghost"
-          size="sm"
+          variant="ghost" size="sm"
           className="flex-1 gap-1.5 h-8 hover:text-primary hover:bg-primary/10 transition-colors"
           onClick={onEdit}
         >
@@ -153,8 +172,7 @@ export function ProviderCard({ provider, onEdit, onDelete }: Props) {
         </Button>
         <div className="w-px h-5 bg-border/60" />
         <Button
-          variant="ghost"
-          size="sm"
+          variant="ghost" size="sm"
           className="flex-1 gap-1.5 h-8 hover:text-destructive hover:bg-destructive/10 transition-colors"
           onClick={onDelete}
         >
@@ -162,17 +180,5 @@ export function ProviderCard({ provider, onEdit, onDelete }: Props) {
         </Button>
       </CardFooter>
     </Card>
-  )
-}
-
-function StatusBadge({ active, activeLabel, inactiveLabel }: { active: boolean; activeLabel: string; inactiveLabel: string }) {
-  return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${active
-      ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
-      : "bg-muted text-muted-foreground border-border"
-      }`}>
-      {active ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-      {active ? activeLabel : inactiveLabel}
-    </span>
   )
 }
