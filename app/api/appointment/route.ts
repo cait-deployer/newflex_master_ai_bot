@@ -17,11 +17,11 @@ export interface AppointmentPayload {
     attorney_name?: string;
     attorney_phone?: string;
     attorney_email?: string;
-    provider_id?: number; // ← приходит с фронта из карточки
+    provider_id?: number;
     provider_name?: string;
     provider_specialty?: string;
     provider_address?: string;
-    doctor_name?: string; // ← используется только для резолвинга, не пишется в БД
+    doctor_name?: string;
     visit_format?: string;
     service_type?: string;
     availability?: string;
@@ -188,39 +188,40 @@ export async function POST(req: Request) {
 
         const c = (v?: string | null) => v?.replace(/\*\*/g, '').trim() || null;
 
-        // ── provider_id: с фронта если есть → иначе резолвинг ────────────────
         const provider_id: number | null = rest.provider_id
-            ? Number(rest.provider_id) // ← Number() на случай если пришёл как строка
+            ? Number(rest.provider_id)
             : await resolveProviderId(rest.provider_name, rest.provider_address, rest.doctor_name);
 
         console.log(
             `[appointments] provider_id = ${provider_id} (from_client=${!!rest.provider_id})`,
         );
 
-        // ── Insert appointment ────────────────────────────────────────────────
+        // ─ Insert appointment
         const { data: appt, error: apptError } = await supabase
             .from('appointments')
-            .insert({
-                session_id,
-                patient_name: c(rest.patient_name) ?? rest.patient_name.trim(),
-                phone: c(rest.phone),
-                date_of_birth: toIsoDate(rest.date_of_birth),
-                date_of_injury: toIsoDate(rest.date_of_injury),
-                legal_firm: c(rest.legal_firm),
-                attorney_name: c(rest.attorney_name),
-                attorney_phone: c(rest.attorney_phone),
-                attorney_email: c(rest.attorney_email),
-                provider_id, // ← теперь всегда есть значение
-                provider_name: c(rest.provider_name),
-                provider_specialty: c(rest.provider_specialty),
-                provider_address: c(rest.provider_address),
-                // doctor_name — НЕТ колонки в appointments, не пишем
-                visit_format: c(rest.visit_format),
-                service_type: c(rest.service_type),
-                availability: c(rest.availability),
-                additional_notes: c(rest.additional_notes),
-                status: 'pending',
-            })
+            .upsert(
+                {
+                    session_id,
+                    patient_name: c(rest.patient_name) ?? rest.patient_name.trim(),
+                    phone: c(rest.phone),
+                    date_of_birth: toIsoDate(rest.date_of_birth),
+                    date_of_injury: toIsoDate(rest.date_of_injury),
+                    legal_firm: c(rest.legal_firm),
+                    attorney_name: c(rest.attorney_name),
+                    attorney_phone: c(rest.attorney_phone),
+                    attorney_email: c(rest.attorney_email),
+                    provider_id,
+                    provider_name: c(rest.provider_name),
+                    provider_specialty: c(rest.provider_specialty),
+                    provider_address: c(rest.provider_address),
+                    visit_format: c(rest.visit_format),
+                    service_type: c(rest.service_type),
+                    availability: c(rest.availability),
+                    additional_notes: c(rest.additional_notes),
+                    status: 'pending',
+                },
+                { onConflict: 'session_id', ignoreDuplicates: false },
+            )
             .select('id')
             .single();
 
@@ -232,7 +233,7 @@ export async function POST(req: Request) {
             );
         }
 
-        // ── Documents ─────────────────────────────────────────────────────────
+        // Documents
         const docsToInsert: Array<{
             session_id: string;
             document_type: string;
