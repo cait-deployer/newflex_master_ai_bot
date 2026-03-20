@@ -447,7 +447,6 @@ export default function AdminDashboard() {
                               <div className="flex items-center gap-2 min-w-0">
                                 <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-teal-400" />
                                 <span className="text-sm truncate">{l.name}</span>
-                                {isSpanish && ps.spanishCount > 0 && <span className="text-[10px] text-green-600 dark:text-green-400 font-medium shrink-0">✓ EN/ES bot</span>}
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
