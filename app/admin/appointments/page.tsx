@@ -123,11 +123,16 @@ export default function AppointmentsPage() {
   const [activeAppt, setActiveAppt] = useState<Appointment | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
-  // ── Fetch ────────────────────────────────────────────────────────────────
+  // ── Fetch — все фильтры уходят на сервер ────────────────────────────────
   const fetchAppointments = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch("/api/admin/appointments?limit=1000")
+      const params = new URLSearchParams({ limit: "1000" })
+      if (search.trim()) params.set("search", search.trim())
+      if (serviceFilter !== "all") params.set("service_type", serviceFilter)
+      if (visitFilter !== "all") params.set("visit_format", visitFilter)
+
+      const res = await fetch(`/api/admin/appointments?${params}`)
       if (!res.ok) throw new Error("Failed to fetch appointments")
       const data = await res.json()
       setAppointments(data.appointments ?? [])
@@ -137,32 +142,29 @@ export default function AppointmentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [search, serviceFilter, visitFilter])
 
   useEffect(() => { fetchAppointments() }, [fetchAppointments])
+  // убираем старые useEffect для сброса страницы — теперь fetchAppointments сам триггерится
   useEffect(() => { setCurrentPage(1) }, [search, serviceFilter, visitFilter, itemsPerPage])
   useEffect(() => { setSelectedIds(new Set()) }, [search, serviceFilter, visitFilter, currentPage, itemsPerPage])
 
-  // ── Filter ───────────────────────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    let list = appointments
-    if (serviceFilter !== "all") list = list.filter(a => a.service_type === serviceFilter)
-    if (visitFilter !== "all") list = list.filter(a => a.visit_format === visitFilter)
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      list = list.filter(a =>
-        [
-          a.patient_name,
-          a.attorney_name,
-          a.legal_firm,
-          a.provider_name,
-          a.medical_providers?.provider_name,
-          a.service_type,
-        ].some(v => v?.toLowerCase().includes(q))
-      )
-    }
-    return list
-  }, [appointments, search, serviceFilter, visitFilter])
+  // ── Filter — только локальная пагинация, данные уже отфильтрованы сервером ─
+  const filtered = appointments // сервер уже вернул нужное
+
+  // serviceTypes для селекта — грузим отдельно без фильтров
+  const [allServiceTypes, setAllServiceTypes] = useState<string[]>([])
+  useEffect(() => {
+    fetch("/api/admin/appointments?limit=1000")
+      .then(r => r.json())
+      .then(d => {
+        const types = Array.from(
+          new Set((d.appointments ?? []).map((a: any) => a.service_type).filter(Boolean))
+        ) as string[]
+        setAllServiceTypes(types)
+      })
+      .catch(() => { })
+  }, [])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage))
   const paginated = useMemo(() => {
@@ -248,8 +250,17 @@ export default function AppointmentsPage() {
   }
 
   // ── Derived stats ─────────────────────────────────────────────────────────
-  const telemedCount = appointments.filter(a => a.visit_format === "telemed").length
-  const inPersonCount = appointments.filter(a => a.visit_format === "in_person").length
+
+  const isTelemed = (a: Appointment) =>
+    /telemed/i.test(a.visit_format ?? '') ||
+    (!a.visit_format && a.medical_providers?.telemed === true)
+
+  const isInPerson = (a: Appointment) =>
+    /in.?person/i.test(a.visit_format ?? '') ||
+    (!a.visit_format && a.medical_providers?.in_person === true)
+
+  const telemedCount = appointments.filter(isTelemed).length
+  const inPersonCount = appointments.filter(isInPerson).length
 
   const serviceTypes = useMemo(() =>
     Array.from(new Set(appointments.map(a => a.service_type).filter(Boolean))) as string[],
@@ -303,7 +314,7 @@ export default function AppointmentsPage() {
           </div>
 
           {/* Stats badges */}
-          <div className="flex flex-wrap gap-2">
+          {/* <div className="flex flex-wrap gap-2">
             <Badge variant="secondary" className="px-3 py-1.5 text-sm rounded-lg font-medium">
               {appointments.length} total
             </Badge>
@@ -318,7 +329,7 @@ export default function AppointmentsPage() {
                 {filtered.length} found
               </Badge>
             )}
-          </div>
+          </div> */}
 
           {/* Toolbar */}
           <div className="flex flex-col sm:flex-row gap-3">
