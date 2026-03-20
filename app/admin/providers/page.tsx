@@ -21,6 +21,7 @@ import {
 import { ProviderCard } from "./provider-card"
 import { ProviderTable } from "./provider-table"
 import { ProviderForm } from "./provider-form"
+import { ProviderDetail } from "./provider-detail"
 import { ImportProvidersDialog } from "./import-providers-dialog"
 import PaginationComponent from "@/components/shared/pagination-component"
 
@@ -69,14 +70,16 @@ export default function ProvidersPage() {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("cards")
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [activeProvider, setActiveProvider] = useState<Provider | null>(null)
 
-  // ── Bulk selection ─────────────────────────────────────────────────────────
+  // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [saving, setSaving] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
@@ -89,6 +92,7 @@ export default function ProvidersPage() {
       if (!res.ok) throw new Error("Failed to fetch providers")
       const data = await res.json()
       setProviders(data.providers ?? [])
+      setLastUpdated(new Date())
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
   }, [])
@@ -117,7 +121,7 @@ export default function ProvidersPage() {
     if (page >= 1 && page <= totalPages) setCurrentPage(page)
   }
 
-  // ── Selection helpers ──────────────────────────────────────────────────────
+  // Selection helpers
   const pageIds = useMemo(() => paginated.map((p) => p.id), [paginated])
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id))
   const somePageSelected = pageIds.some((id) => selectedIds.has(id))
@@ -136,7 +140,7 @@ export default function ProvidersPage() {
   const selectAll = () => setSelectedIds(new Set(filtered.map((p) => p.id)))
   const clearSelect = () => setSelectedIds(new Set())
 
-  // ── CRUD ───────────────────────────────────────────────────────────────────
+  // CRUD
   const handleCreate = async (data: Omit<Provider, "id" | "created_at">) => {
     setSaving(true)
     try {
@@ -225,98 +229,85 @@ export default function ProvidersPage() {
   const bulkExtra = selectedIds.size > 5 ? selectedIds.size - 5 : 0
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-start gap-4">
-          <div className="p-3 bg-primary/10 rounded-xl shrink-0">
-            <Users className="w-10 h-10 text-primary" />
+    <div className="flex h-[calc(100vh-57px)] overflow-hidden -m-4 sm:-m-6 lg:-m-8 xl:-mx-10">
+
+      {/* ── Left panel ── */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+
+        {/* ── TOP: fixed header zone (header + stats + toolbar + error) ── */}
+        <div className="shrink-0 px-4 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-6 lg:pt-8 space-y-4 pb-3 border-b border-border bg-background">
+
+          {/* Header */}
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-primary/10 rounded-xl shrink-0">
+                <Users className="w-10 h-10 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-bold tracking-tight">Providers</h1>
+                <p className="text-lg text-muted-foreground mt-1">Manage medical providers available in the chat search.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button variant="outline" size="lg" className="gap-2" onClick={() => setImportOpen(true)}>
+                <FileSpreadsheet className="w-5 h-5" /> Import Excel
+              </Button>
+              <Button onClick={() => setViewMode("create")} size="lg" className="gap-2">
+                <Plus className="w-5 h-5" /> Add Provider
+              </Button>
+            </div>
           </div>
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight">Providers</h1>
-            <p className="text-lg text-muted-foreground mt-1">Manage medical providers available in the chat search.</p>
+
+          {/* Stats */}
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary" className="px-3 py-1.5 text-sm rounded-lg font-medium">{providers.length} total</Badge>
+            <Badge className="px-3 py-1.5 text-sm rounded-lg bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800">{telemedCount} telemed</Badge>
+            <Badge className="px-3 py-1.5 text-sm rounded-lg bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800">{inPersonCount} in-person</Badge>
+            {search && <Badge variant="outline" className="px-3 py-1.5 text-sm rounded-lg">{filtered.length} found</Badge>}
           </div>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <Button variant="outline" size="lg" className="gap-2" onClick={() => setImportOpen(true)}>
-            <FileSpreadsheet className="w-5 h-5" /> Import Excel
-          </Button>
-          <Button onClick={() => setViewMode("create")} size="lg" className="gap-2">
-            <Plus className="w-5 h-5" /> Add Provider
-          </Button>
-        </div>
-      </div>
 
-      {/* Stats */}
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="secondary" className="px-3 py-1.5 text-sm rounded-lg font-medium">{providers.length} total</Badge>
-        <Badge className="px-3 py-1.5 text-sm rounded-lg bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800">{telemedCount} telemed</Badge>
-        <Badge className="px-3 py-1.5 text-sm rounded-lg bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800">{inPersonCount} in-person</Badge>
-        {search && <Badge variant="outline" className="px-3 py-1.5 text-sm rounded-lg">{filtered.length} found</Badge>}
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search by name, doctor, specialty, city, modality…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <div className="hidden sm:flex rounded-lg border border-border overflow-hidden">
-            <Button variant={displayMode === "cards" ? "secondary" : "ghost"} size="sm" className="rounded-none h-10 px-3 gap-1.5 border-r border-border" onClick={() => setDisplayMode("cards")}>
-              <LayoutGrid className="w-4 h-4" /><span className="hidden md:inline">Cards</span>
-            </Button>
-            <Button variant={displayMode === "table" ? "secondary" : "ghost"} size="sm" className="rounded-none h-10 px-3 gap-1.5" onClick={() => setDisplayMode("table")}>
-              <Table2 className="w-4 h-4" /><span className="hidden md:inline">Table</span>
-            </Button>
+          {/* Toolbar */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 h-10">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search by name, doctor, specialty, city, modality…"
+                type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 !h-10 py-1" />
+            </div>
+            <div className="flex gap-2 shrink-0 items-start">
+              <div className="hidden sm:flex rounded-lg border border-border overflow-hidden">
+                <Button variant={displayMode === "cards" ? "secondary" : "ghost"} size="sm"
+                className="rounded-none h-10 px-3 gap-1.5 border-r border-border" onClick={() => setDisplayMode("cards")}>
+                  <LayoutGrid className="w-4 h-4" /><span className="hidden md:inline">Cards</span>
+                </Button>
+                <Button variant={displayMode === "table" ? "secondary" : "ghost"} size="sm" className="rounded-none h-10 px-3 gap-1.5" onClick={() => setDisplayMode("table")}>
+                  <Table2 className="w-4 h-4" /><span className="hidden md:inline">Table</span>
+                </Button>
+              </div>
+              <div className="flex flex-col items-end gap-0.5">
+                <Button variant="outline" onClick={fetchProviders} disabled={loading} className="gap-2 h-10">
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  <span className="hidden sm:inline">Refresh</span>
+                </Button>
+                {lastUpdated && (
+                  <p className="text-[11px] text-muted-foreground hidden sm:block whitespace-nowrap">
+                    Updated {lastUpdated.toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
-          <Button variant="outline" onClick={fetchProviders} disabled={loading} className="gap-2 h-10">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            <span className="hidden sm:inline">Refresh</span>
-          </Button>
-        </div>
-      </div>
 
-      {/* Error */}
-      {error && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <p className="text-sm font-medium">{error}</p>
-          <Button variant="ghost" size="sm" onClick={fetchProviders} className="ml-auto">Retry</Button>
-        </div>
-      )}
-
-      {/* Skeleton */}
-      {loading && !error && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-64 rounded-xl bg-muted/50 animate-pulse" style={{ animationDelay: `${i * 70}ms` }} />
-          ))}
-        </div>
-      )}
-
-      {/* Empty */}
-      {!loading && !error && filtered.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
-          <div className="p-5 bg-muted/50 rounded-2xl"><Users className="w-12 h-12 text-muted-foreground/40" /></div>
-          <div>
-            <p className="text-lg font-semibold">{search ? "No providers match" : "No providers yet"}</p>
-            <p className="text-sm text-muted-foreground mt-1">{search ? "Try different keywords." : "Click «Add Provider» to get started."}</p>
-          </div>
-          {!search && (
-            <div className="flex gap-2 mt-2">
-              <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2"><FileSpreadsheet className="w-4 h-4" /> Import Excel</Button>
-              <Button onClick={() => setViewMode("create")} className="gap-2"><Plus className="w-4 h-4" /> Add Provider</Button>
+          {/* Error */}
+          {error && (
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <p className="text-sm font-medium">{error}</p>
+              <Button variant="ghost" size="sm" onClick={fetchProviders} className="ml-auto">Retry</Button>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Content */}
-      {!loading && !error && filtered.length > 0 && (
-        <div className="space-y-3">
-
-          {/* ── Floating bulk action bar ────────────────────────────────── */}
+          {/* Bulk action bar */}
           {selectedIds.size > 0 && (
             <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-primary/5 border border-primary/20 animate-in fade-in slide-in-from-top-1 duration-150">
               <div className="flex items-center gap-3 min-w-0 flex-wrap">
@@ -345,53 +336,97 @@ export default function ProvidersPage() {
               </div>
             </div>
           )}
+        </div>
 
-          {/* Mobile — always cards */}
-          <div className="sm:hidden grid gap-4">
-            {paginated.map((p) => (
-              <ProviderCard
-                key={p.id} provider={p}
-                selected={selectedIds.has(p.id)}
-                onSelect={() => toggleOne(p.id)}
-                onEdit={() => openEdit(p)}
-                onDelete={() => setDeletingId(p.id)}
-              />
-            ))}
-          </div>
+        {/* ── MIDDLE: scrollable content area ── */}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-4">
 
-          {/* Desktop */}
-          <div className="hidden sm:block">
-            {displayMode === "cards" ? (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {/* Skeleton */}
+          {loading && !error && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-64 rounded-xl bg-muted/50 animate-pulse" style={{ animationDelay: `${i * 70}ms` }} />
+              ))}
+            </div>
+          )}
+
+          {/* Empty */}
+          {!loading && !error && filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center gap-4">
+              <div className="p-5 bg-muted/50 rounded-2xl"><Users className="w-12 h-12 text-muted-foreground/40" /></div>
+              <div>
+                <p className="text-lg font-semibold">{search ? "No providers match" : "No providers yet"}</p>
+                <p className="text-sm text-muted-foreground mt-1">{search ? "Try different keywords." : "Click «Add Provider» to get started."}</p>
+              </div>
+              {!search && (
+                <div className="flex gap-2 mt-2">
+                  <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2"><FileSpreadsheet className="w-4 h-4" /> Import Excel</Button>
+                  <Button onClick={() => setViewMode("create")} className="gap-2"><Plus className="w-4 h-4" /> Add Provider</Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Content: cards or table */}
+          {!loading && !error && filtered.length > 0 && (
+            <>
+              {/* Mobile — always cards */}
+              <div className="sm:hidden grid gap-4">
                 {paginated.map((p) => (
                   <ProviderCard
                     key={p.id} provider={p}
                     selected={selectedIds.has(p.id)}
                     onSelect={() => toggleOne(p.id)}
+                    isActive={activeProvider?.id === p.id}
                     onEdit={() => openEdit(p)}
                     onDelete={() => setDeletingId(p.id)}
+                    onOpen={() => setActiveProvider(prev => prev?.id === p.id ? null : p)}
                   />
                 ))}
               </div>
-            ) : (
-              <ProviderTable
-                providers={paginated}
-                selectedIds={selectedIds}
-                allPageSelected={allPageSelected}
-                somePageSelected={somePageSelected}
-                onToggleOne={toggleOne}
-                onTogglePage={togglePage}
-                onEdit={openEdit}
-                onDelete={(id) => setDeletingId(id)}
-              />
-            )}
-          </div>
 
-          {/* Pagination */}
-          <div className="mt-2 rounded-xl border border-border bg-muted/20 px-4 py-3">
+              {/* Desktop */}
+              <div className="hidden sm:block">
+                {displayMode === "cards" ? (
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {paginated.map((p) => (
+                      <ProviderCard
+                        key={p.id} provider={p}
+                        selected={selectedIds.has(p.id)}
+                        isActive={activeProvider?.id === p.id}
+                        onSelect={() => toggleOne(p.id)}
+                        onEdit={() => openEdit(p)}
+                        onDelete={() => setDeletingId(p.id)}
+                        onOpen={() => setActiveProvider(prev => prev?.id === p.id ? null : p)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <ProviderTable
+                    providers={paginated}
+                    selectedIds={selectedIds}
+                    allPageSelected={allPageSelected}
+                    somePageSelected={somePageSelected}
+                    onToggleOne={toggleOne}
+                    onTogglePage={togglePage}
+                    onEdit={openEdit}
+                    onDelete={(id) => setDeletingId(id)}
+                    onOpen={(p) => setActiveProvider(prev => prev?.id === p.id ? null : p)}
+                    activeId={activeProvider?.id}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ── BOTTOM: pinned pagination ── */}
+        {!loading && !error && filtered.length > 0 && (
+          <div className="shrink-0 border-t border-border bg-muted/20 px-4 sm:px-6 lg:px-8 xl:px-10 py-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground text-center sm:text-left">
-                Showing <span className="font-semibold text-foreground">{from}–{to}</span> of <span className="font-semibold text-foreground">{filtered.length}</span> providers
+                Showing <span className="font-semibold text-foreground">{from}–{to}</span> of{" "}
+                <span className="font-semibold text-foreground">{filtered.length}</span> providers
               </p>
               <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
                 <div className="flex items-center gap-2">
@@ -408,6 +443,19 @@ export default function ProvidersPage() {
               </div>
             </div>
           </div>
+        )}
+
+      </div>{/* end left panel */}
+
+      {/* ── Right panel: provider detail ── */}
+      {activeProvider && (
+        <div className="w-[380px] shrink-0 border-l border-border overflow-y-auto bg-card mt-4">
+          <ProviderDetail
+            provider={activeProvider}
+            onClose={() => setActiveProvider(null)}
+            onEdit={() => { openEdit(activeProvider); setActiveProvider(null) }}
+            onDelete={() => { setDeletingId(activeProvider.id); setActiveProvider(null) }}
+          />
         </div>
       )}
 

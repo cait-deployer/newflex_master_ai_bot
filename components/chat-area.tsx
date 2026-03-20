@@ -4,9 +4,9 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Send, Loader, User, MessageCircle, Paperclip, FileText, X, Stethoscope } from 'lucide-react'
 import { SimplePDFUpload } from './simple-pdf-upload'
-import { LetterPreview } from './letter-preview'
 import { TypingEffect } from './typing-effect'
-import { renderMarkdown } from '@/lib/render-markdown'
+import { renderMarkdown, type ProviderSelectHandler } from '@/lib/render-markdown'
+import { LetterPreview, type SessionDocument } from '@/components/letter-preview'
 
 interface Message {
   id: number
@@ -28,6 +28,7 @@ interface LetterData {
   attorney_phone?: string
   attorney_email?: string
   service_type?: string
+  provider_id?: number | null
   provider_name?: string
   provider_specialty?: string
   provider_address?: string
@@ -70,16 +71,16 @@ const ChatMessage = memo(function ChatMessage({
 }: {
   message: Message
   isLastAssistant: boolean
-  onSelectProvider: (name: string, address: string) => void
+    onSelectProvider: ProviderSelectHandler
   onScrollToBottom: () => void
 }) {
   return (
     <div className={`flex gap-3 md:gap-4 w-full animate-in fade-in duration-300 ${message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-      <div className={`shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center shadow-sm ${message.sender === 'assistant' ? 'bg-primary/10' : 'bg-primary'}`}>
-        {message.sender === 'assistant' ? <MessageCircle className="w-5 h-5 text-primary" /> : <User className="w-5 h-5 text-primary-foreground" />}
+      <div className={`shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center shadow-sm ${message.sender === 'assistant' ? 'bg-primary/10' : 'bg-secondary'}`}>
+        {message.sender === 'assistant' ? <MessageCircle className="w-5 h-5 text-primary" /> : <User className="w-5 h-5 text-secondary-foreground" />}
       </div>
       <div className={`flex flex-col gap-2 max-w-[85%] md:max-w-[75%] ${message.sender === 'user' ? 'items-end' : 'items-start'}`}>
-        <div className={`px-4 py-3 rounded-2xl text-sm md:text-base shadow-sm leading-relaxed ${message.sender === 'user' ? 'bg-primary text-primary-foreground rounded-tr-none' : 'bg-muted text-foreground rounded-tl-none'}`}>
+        <div className={`px-4 py-3 rounded-2xl text-sm md:text-base shadow-sm leading-relaxed ${message.sender === 'user' ? 'bg-secondary text-secondary-foreground rounded-tr-none' : 'bg-muted text-foreground rounded-tl-none'}`}>
           {message.images && message.images.length > 0 && (
             <div className="mb-3 rounded-xl overflow-hidden shadow-inner bg-black/5">
               <img src={message.images[0]} alt="Doc" className="max-w-full h-auto max-h-64 object-contain" />
@@ -128,6 +129,7 @@ export function ChatArea({
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [pendingShowPreview, setPendingShowPreview] = useState(false)
   const [lastUploadedFile, setLastUploadedFile] = useState<File | null>(null)
+  const [sessionDocuments, setSessionDocuments] = useState<SessionDocument[]>([])
 
   const lastAssistantId = useMemo(
     () => [...messages].reverse().find(m => m.sender === 'assistant' && !m.isLoading)?.id,
@@ -180,11 +182,13 @@ export function ChatArea({
   ]
 
   // Normalizer: takes raw n8n response string, returns { text, fields } regardless of format
+
+
   const normalizeN8nResponse = (rawText: string): { text: string; fields: Record<string, string> } => {
     const knownFields = [
       'patient_name', 'phone', 'dob', 'doi', 'legal_firm', 'law_firm',
       'attorney_name', 'attorney_phone', 'attorney_email', 'service_type',
-      'provider_name', 'provider_specialty', 'provider_address',
+      'provider_name', 'provider_specialty', 'provider_address', 'doctor_name',
       'format', 'availability', 'additional_notes',
     ]
     const extractFields = (obj: any): Record<string, string> => {
@@ -202,15 +206,20 @@ export function ChatArea({
     try {
       data = JSON.parse(rawText)
     } catch {
-      // Not JSON at all -- treat as plain text
       return { text: rawText, fields: {} }
     }
-    // n8n sometimes returns array
     if (Array.isArray(data)) data = data[0] || {}
+
+    // ── Если это ответ с провайдерами — возвращаем RAW текст без изменений ──────
+    // render-markdown сам разберёт providers[] из JSON
+    if (Array.isArray(data?.providers) && data.providers.length > 0) {
+      console.log('[v0] Normalizer: PROVIDERS JSON — передаём raw в render-markdown')
+      return { text: rawText, fields: {} }
+    }
 
     const outputText = data.output || data.text || data.message || ''
 
-    // FORMAT 1: Top-level structured fields (patient_name, provider_name, etc. on data itself)
+    // FORMAT 1: top-level structured fields
     const topLevelFields = extractFields(data)
     if (Object.keys(topLevelFields).length >= 3) {
       console.log('[v0] Normalizer: FORMAT 1 - top-level JSON fields:', Object.keys(topLevelFields))
@@ -221,18 +230,21 @@ export function ChatArea({
     if (outputText && outputText.trimStart().startsWith('{')) {
       try {
         const innerJson = JSON.parse(outputText)
+        // Тоже проверяем на providers[]
+        if (Array.isArray(innerJson?.providers) && innerJson.providers.length > 0) {
+          console.log('[v0] Normalizer: PROVIDERS JSON inside output')
+          return { text: rawText, fields: {} }
+        }
         const innerFields = extractFields(innerJson)
         if (Object.keys(innerFields).length >= 3) {
           const innerText = innerJson.output || innerJson.text || innerJson.message || ''
           console.log('[v0] Normalizer: FORMAT 2 - JSON inside output string:', Object.keys(innerFields))
           return { text: innerText || 'Analysis complete.', fields: innerFields }
         }
-      } catch {
-        // Not valid JSON inside output -- continue to next format
-      }
+      } catch { }
     }
 
-    // FORMAT 3: Embedded ```json ... ``` code block inside output text
+    // FORMAT 3: embedded ```json``` code block
     if (outputText) {
       const codeBlockMatch = outputText.match(/```(?:json)?\s*\n?\s*(\{[\s\S]*?\})\s*\n?\s*```/)
       if (codeBlockMatch && codeBlockMatch[1]) {
@@ -240,20 +252,17 @@ export function ChatArea({
           const embeddedJson = JSON.parse(codeBlockMatch[1])
           const embeddedFields = extractFields(embeddedJson)
           if (Object.keys(embeddedFields).length >= 3) {
-            // Strip the code block from display text
             const cleanText = outputText.replace(/```(?:json)?\s*\n?\s*\{[\s\S]*?\}\s*\n?\s*```/g, '').trim()
             console.log('[v0] Normalizer: FORMAT 3 - JSON in code block:', Object.keys(embeddedFields))
             return { text: cleanText || 'Analysis complete.', fields: embeddedFields }
           }
-        } catch {
-          // Invalid JSON in code block -- continue
-        }
+        } catch { }
       }
     }
 
-    // FORMAT 4: Plain text response (normal chat, no structured data)
+    // FORMAT 4: plain text
     console.log('[v0] Normalizer: FORMAT 4 - plain text response')
-    return { text: outputText || 'Analysis complete.', fields: {} }
+    return { text: outputText || rawText || 'Analysis complete.', fields: {} }
   }
 
   const parsePatientDataFromText = (text: string) => {
@@ -363,6 +372,12 @@ export function ChatArea({
         /\*\*(?:Additional\s*)?Notes:\*\*\s*(.+?)(?:\n|$)/i,
         /(?:Additional\s*)?Notes:\s*(.+?)(?:\n|$)/i,
       ],
+      doctor_name: [
+        /🏥\s*Doctor\s*Name[:\s]+(.+?)(?:\n|$)/i,
+        /[-•]\s*\*\*Doctor(?:\s*Name)?:\*\*\s*(.+?)(?:\n|$)/i,
+        /\*\*Doctor(?:\s*Name)?:\*\*\s*(.+?)(?:\n|$)/i,
+        /Doctor(?:\s*Name)?:\s*(.+?)(?:\n|$)/i,
+      ],
     }
 
     Object.entries(patterns).forEach(([key, patternList]) => {
@@ -382,11 +397,22 @@ export function ChatArea({
     return Object.keys(data).length > 0 ? data : null
   }
 
-  const handleProcessingComplete = async (_data: any, imageUrls: string[], file: File) => {
+  const handleProcessingComplete = async (_data: any, imageUrls: string[], file: File, fileUrl?: string) => {
     setPendingFile(file)
     setPendingImages(imageUrls)
     setLastUploadedFile(file)
     setShowPdfUpload(false)
+
+    if (fileUrl) {
+      setSessionDocuments(prev => [
+        ...prev,
+        {
+          document_type: 'prescription',
+          file_url: fileUrl,
+          file_name: file.name,
+        },
+      ])
+    }
   }
 
   const persistFormData = (newFormData: any) => {
@@ -396,7 +422,7 @@ export function ChatArea({
     }
   }
 
-  const handleSendMessage = async (userInput: string = inputValue) => {
+  const handleSendMessage = async (userInput: string = inputValue, extraData?: Record<string, any>) => {
     const currentFile = pendingFile
     const currentImages = pendingImages.length > 0 ? [...pendingImages] : []
     const isNewChat = selectedChatId === null
@@ -435,7 +461,8 @@ export function ChatArea({
 
       // Parse ALL assistant messages in current chat to extract collected data
       // This ensures we have the latest data even if React state hasn't updated yet
-      let collectedFromChat: Record<string, any> = { ...formData }
+      let collectedFromChat: Record<string, any> = { ...formData, ...extraData }
+
       for (const msg of messages) {
         if (msg.sender === 'assistant' && msg.text) {
           console.log('[v0] DEBUG: Parsing assistant message:', msg.text.substring(0, 200))
@@ -462,31 +489,26 @@ export function ChatArea({
 5. STOP and WAIT for user confirmation before doing anything else.]${userInput ? ` User message: ${userInput}` : ''}`
         : userInput
       formDataToSend.append('chatInput', n8nInput)
-      formDataToSend.append('sessionId', sessionId) 
+      formDataToSend.append('sessionId', sessionId)
 
-      // Send collected patient/provider data so n8n doesn't ask again
-      // Use collectedFromChat which includes data parsed from chat history
-      console.log('[v0] collectedFromChat being sent to n8n:', JSON.stringify(collectedFromChat))
-      if (Object.keys(collectedFromChat).length > 0) {
-        formDataToSend.append('collectedData', JSON.stringify(collectedFromChat))
-        console.log('[v0] Appended collectedData to request:', JSON.stringify(collectedFromChat))
+      const mergedData = { ...collectedFromChat, ...extraData }
+      if (Object.keys(mergedData).length > 0) {
+        formDataToSend.append('collectedData', JSON.stringify(mergedData))
+        console.log('[v0] Appended collectedData:', JSON.stringify(mergedData))
 
-        // Also send a summary of known fields to help n8n avoid re-asking
-        const knownFields = Object.entries(collectedFromChat)
-          .filter(([_, value]) => value && String(value).trim())
+        const knownFields = Object.entries(mergedData)
+          .filter(([_, value]) => value !== null && value !== undefined && String(value).trim() !== '')
           .map(([key, value]) => `${key}: ${value}`)
           .join(', ')
+
         if (knownFields) {
           formDataToSend.append('knownFields', knownFields)
-          console.log('[v0] Known fields summary:', knownFields)
+          console.log('[v0] ✅ knownFields:', knownFields)
         }
 
-        // Also update formData state with the collected data
-        if (Object.keys(collectedFromChat).length > Object.keys(formData).length) {
-          persistFormData(collectedFromChat)
+        if (Object.keys(mergedData).length > Object.keys(formData).length) {
+          persistFormData(mergedData)
         }
-      } else {
-        console.log('[v0] collectedFromChat is empty, not sending collectedData')
       }
 
       if (currentImages.length > 0) {
@@ -634,6 +656,8 @@ export function ChatArea({
           'provider address': 'provider_address',
           'provider specialty': 'provider_specialty',
           'specialty': 'provider_specialty',
+          'doctor name': 'doctor_name',
+          'doctor': 'doctor_name', 
           'service type': 'service_type',
           'format': 'format',
           'availability': 'availability',
@@ -659,9 +683,12 @@ export function ChatArea({
 
         const isCleanValue = (v: any) => {
           if (v === undefined || v === null) return false
+          if (typeof v === 'number') return true
           const str = String(v).trim()
           if (!str) return false
-          const isQuestion = str.includes('?') || str.toLowerCase().includes('please provide') || str.toLowerCase().includes('could you')
+          const isQuestion = str.includes('?') ||
+            str.toLowerCase().includes('please provide') ||
+            str.toLowerCase().includes('could you')
           return !isQuestion
         }
 
@@ -688,6 +715,15 @@ export function ChatArea({
         // Step 3: Override with current jsonFields (most recent structured data from n8n)
         for (const [k, v] of Object.entries(jsonFields)) {
           if (isCleanValue(v)) allHistoryData[k] = v
+        }
+
+        const providerFields = ['provider_id', 'doctor_name', 'provider_name',
+          'provider_address', 'provider_specialty', 'format']
+        for (const field of providerFields) {
+          const val = formData[field] ?? updatedFormData[field]
+          if (val !== undefined && val !== null && String(val).trim() !== '') {
+            allHistoryData[field] = val
+          }
         }
 
         // Step 4: Fill any remaining gaps from letterData (previous preview state)
@@ -786,6 +822,7 @@ export function ChatArea({
       fd.append('sessionId', sessionId)
       fd.append('letterData', JSON.stringify(dataToSend))
 
+      if (dataToSend.provider_id) fd.append('provider_id', String(dataToSend.provider_id))
       if (dataToSend.patient_name) fd.append('patient_name', dataToSend.patient_name)
       if (dataToSend.phone) fd.append('phone', dataToSend.phone)
       if (dataToSend.dob) fd.append('dob', dataToSend.dob)
@@ -801,6 +838,7 @@ export function ChatArea({
       if (dataToSend.format) fd.append('format', dataToSend.format || '')
       if (dataToSend.availability) fd.append('availability', dataToSend.availability || '')
       if (dataToSend.additional_notes) fd.append('additional_notes', dataToSend.additional_notes || '')
+      if (dataToSend.doctor_name) fd.append('doctor_name', dataToSend.doctor_name)
       if (lastUploadedFile) fd.append('attachment', lastUploadedFile, lastUploadedFile.name)
 
       const response = await fetch('/api/n8n', {
@@ -848,30 +886,28 @@ export function ChatArea({
     el.style.height = Math.min(el.scrollHeight, 160) + 'px'
   }
 
-  const handleSelectProvider = (providerName: string, providerAddress: string) => {
-    // Save provider data to formData and letterData
-    const providerData = {
-      provider_name: providerName,
-      provider_address: providerAddress,
-    }
 
-    // Update formData with provider data - this will be picked up by handleSendMessage
-    // which parses chat history and adds context automatically
+  const handleSelectProvider: ProviderSelectHandler = (provider) => {
+    const providerData: Record<string, any> = {}
+    if (provider.id) providerData.provider_id = provider.id
+    if (provider.name) providerData.provider_name = provider.name
+    if (provider.address) providerData.provider_address = provider.address
+    if (provider.specialty) providerData.provider_specialty = provider.specialty
+    if (provider.format) providerData.format = provider.format
+    if (provider.doctor) providerData.doctor_name = provider.doctor
+
+    console.log('[v0] Provider selected:', JSON.stringify(providerData))
+
     setFormData((prev: Record<string, any>) => ({ ...prev, ...providerData }))
     setLetterData((prev: Record<string, any>) => ({ ...prev, ...providerData }))
-
-    // Persist to storage so handleSendMessage can access it
     persistFormData({ ...formData, ...providerData })
 
-    // Send only the user-friendly selection text
-    // Context will be added automatically by handleSendMessage from chat history
-    const selectionText = `I choose ${providerName} at ${providerAddress}`
+    const doctorPart = provider.doctor ? ` (Doctor: ${provider.doctor})` : ''
+    const selectionText = `I choose ${provider.name}${doctorPart} at ${provider.address}`
 
     setInputValue(selectionText)
-    // Use a small delay to show the selection, then trigger normal send
-    setTimeout(() => {
-      handleSendMessage(selectionText)
-    }, 100)
+    // Передаём providerData как extraData — гарантия попадания в knownFields
+    setTimeout(() => handleSendMessage(selectionText, providerData), 100)
   }
 
   return (
@@ -981,7 +1017,15 @@ export function ChatArea({
       {showLetterPreview && letterData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-2xl h-full overflow-y-auto rounded-2xl shadow-2xl">
-            <LetterPreview data={letterData} onConfirm={handleLetterConfirm} onCancel={handleLetterCancel} isLoading={isSending} />
+            <LetterPreview
+              data={letterData}
+              sessionId={sessionId}
+              attachmentFile={lastUploadedFile}
+              sessionDocuments={sessionDocuments}
+              onConfirm={handleLetterConfirm}
+              onCancel={handleLetterCancel}
+              isLoading={isSending}
+            />
           </div>
         </div>
       )

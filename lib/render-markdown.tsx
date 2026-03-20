@@ -1,15 +1,107 @@
 import React from 'react'
 import { ProviderCard, parseProviders } from '@/components/provider-card'
 
-/**
- * Converts a simple markdown string into React elements.
- * Handles: **bold**, - list items, \n line breaks, provider lists.
- * Does NOT modify the raw string -- only used for display.
- */
-export function renderMarkdown(text: string, onSelectProvider?: (name: string, address: string) => void): React.ReactNode {
+export type ProviderSelectHandler = (provider: {
+  id?: number
+  name: string
+  address?: string
+  specialty?: string
+  format?: string
+  distance?: string
+  coverType?: string
+  doctor?: string
+}) => void
+
+export function isProviderJson(text: string): boolean {
+  if (!text || !text.includes('providers')) return false
+  const data = unwrapN8nJson(text)
+  if (!data) return false
+  const root = Array.isArray(data) ? data[0] : data
+  return Array.isArray(root?.providers) && root.providers.length > 0
+}
+
+export function extractProvidersData(text: string): {
+  providers: any[]
+  introText: string
+  outroText: string
+} | null {
+  return extractProvidersFromJson(text)
+}
+
+function unwrapN8nJson(text: string): any | null {
+  // Попытка 1: прямой парс
+  try { return JSON.parse(text) } catch { }
+
+  // Попытка 2: n8n вернул { output: "json\n{...}" }
+  try {
+    const outer = JSON.parse(text)
+    const raw = Array.isArray(outer) ? outer[0] : outer
+    const outputStr: string = raw?.output ?? ''
+    // Убираем префикс "json\n" или "```json\n" и парсим
+    const cleaned = outputStr.replace(/^```?json\s*/i, '').replace(/```\s*$/, '').trim()
+    if (cleaned.startsWith('{')) return JSON.parse(cleaned)
+  } catch { }
+
+  // Попытка 3: найти {...} прямо в тексте
+  try {
+    const m = text.match(/\{[\s\S]*\}/)
+    if (m) return JSON.parse(m[0])
+  } catch { }
+
+  return null
+}
+
+// Пытаемся вытащить providers[] прямо из JSON
+function extractProvidersFromJson(text: string): {
+  providers: any[]
+  introText: string
+  outroText: string
+} | null {
+  const data = unwrapN8nJson(text)
+  if (!data) return null
+
+  const root = Array.isArray(data) ? data[0] : data
+
+  if (Array.isArray(root?.providers) && root.providers.length > 0) {
+    return {
+      providers: root.providers,
+      introText: root.output || root.text || '',
+      outroText: root.outro || '',
+    }
+  }
+  return null
+}
+
+export function renderMarkdown(
+  text: string,
+  onSelectProvider?: ProviderSelectHandler
+): React.ReactNode {
   if (!text) return null
 
-  // Check if this is a provider list
+  // Шаг 1: пробуем JSON providers[] (чистый путь)
+  const fromJson = extractProvidersFromJson(text)
+  if (fromJson && fromJson.providers.length > 0) {
+    return (
+      <div className="space-y-3">
+        {fromJson.introText && (
+          <p className="text-gray-700">{inlineParse(fromJson.introText)}</p>
+        )}
+        <div className="grid gap-3">
+          {fromJson.providers.map((p, i) => (
+            <ProviderCard
+              key={i}
+              provider={p}
+              onSelect={(prov) => onSelectProvider?.(prov)}
+            />
+          ))}
+        </div>
+        {fromJson.outroText && (
+          <p className="text-gray-700 mt-2">{inlineParse(fromJson.outroText)}</p>
+        )}
+      </div>
+    )
+  }
+
   const providerData = parseProviders(text)
   if (providerData && providerData.providers.length > 0) {
     return (
@@ -19,10 +111,10 @@ export function renderMarkdown(text: string, onSelectProvider?: (name: string, a
         )}
         <div className="grid gap-3">
           {providerData.providers.map((provider, i) => (
-            <ProviderCard 
-              key={i} 
-              provider={provider} 
-              onSelect={onSelectProvider || (() => {})} 
+            <ProviderCard
+              key={i}
+              provider={provider}
+              onSelect={(p) => onSelectProvider?.(p)}
             />
           ))}
         </div>
@@ -33,7 +125,7 @@ export function renderMarkdown(text: string, onSelectProvider?: (name: string, a
     )
   }
 
-  // Split into lines
+  // Шаг 3: обычный markdown текст
   const lines = text.split('\n')
   const elements: React.ReactNode[] = []
   let listItems: React.ReactNode[] = []
@@ -52,19 +144,13 @@ export function renderMarkdown(text: string, onSelectProvider?: (name: string, a
 
   lines.forEach((line, i) => {
     const trimmed = line.trim()
-
-    // List item: starts with "- " or "* "
     if (/^[-*]\s+/.test(trimmed)) {
       const content = trimmed.replace(/^[-*]\s+/, '')
       listItems.push(<li key={`li-${i}`}>{inlineParse(content)}</li>)
       return
     }
-
-    // Not a list item -- flush any pending list
     flushList()
-
     if (trimmed === '') {
-      // Empty line = small gap
       elements.push(<br key={`br-${i}`} />)
     } else {
       elements.push(
@@ -80,9 +166,7 @@ export function renderMarkdown(text: string, onSelectProvider?: (name: string, a
   return <>{elements}</>
 }
 
-/** Parse inline markdown: **bold** */
 function inlineParse(text: string): React.ReactNode {
-  // Split by **bold** markers
   const parts = text.split(/(\*\*[^*]+\*\*)/)
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {

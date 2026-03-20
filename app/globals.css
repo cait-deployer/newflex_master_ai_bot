@@ -142,3 +142,330 @@ textarea.overflow-y-auto::-webkit-scrollbar {
     display: none;
   }
 }
+
+/* ============================================================
+   DARK MODE — drop this into your globals.css
+   Uses next-themes: class="dark" on <html>
+   ============================================================ */
+
+@layer base {
+  /* ── LIGHT THEME (baseline — keep yours, these are safe defaults) ─────── */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 14% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 14% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 14% 10%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 14% 20%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 14% 94%;
+    --accent-foreground: 222 14% 10%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.625rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  /* ── DARK THEME ─────────────────────────────────────────────────────────
+     Philosophy:
+     • Deep navy-charcoal base (not pure black — easier on the eyes)
+     • Layered surface system: bg < card < popover
+     • Primary stays vivid blue, pops on dark
+     • Muted text is readable at ~55% brightness
+     • Borders are subtle but present
+     • Destructive is slightly desaturated (less harsh)
+  ───────────────────────────────────────────────────────────────────────── */
+  .dark {
+    /* ── Base surfaces ── */
+    --background:       222 18% 11%;    /* #161c27 deep navy */
+    --foreground:       213 20% 90%;    /* #dde3ed soft white */
+
+    --card:             222 16% 14%;    /* #1c2333 raised surface */
+    --card-foreground:  213 20% 90%;
+
+    --popover:          222 15% 17%;    /* #222b3c dropdown/sheet */
+    --popover-foreground: 213 20% 90%;
+
+    /* ── Primary — vibrant blue, adjusted for dark bg ── */
+    --primary:          217 91% 60%;    /* #4f8ef7 — bright, accessible */
+    --primary-foreground: 0 0% 100%;
+
+    /* ── Secondary — subtle slate ── */
+    --secondary:        220 14% 20%;    /* #2a3344 */
+    --secondary-foreground: 213 20% 80%;
+
+    /* ── Muted — dimmed content areas ── */
+    --muted:            220 14% 18%;    /* #252f40 */
+    --muted-foreground: 215 14% 55%;    /* #7c8fa8 readable grey */
+
+    /* ── Accent — hover/active states ── */
+    --accent:           220 14% 22%;    /* #2e3a4e */
+    --accent-foreground: 213 20% 88%;
+
+    /* ── Destructive — softer red on dark ── */
+    --destructive:      0 72% 51%;      /* #cc3333 */
+    --destructive-foreground: 0 0% 100%;
+
+    /* ── Chrome ── */
+    --border:           220 14% 20%;    /* #29334a */
+    --input:            220 14% 20%;
+    --ring:             217 91% 60%;
+
+    /* ── Sidebar ── */
+    --sidebar-background:          222 18% 9%;     /* #111827 deeper than bg */
+    --sidebar-foreground:          213 18% 75%;
+    --sidebar-primary:             217 91% 60%;
+    --sidebar-primary-foreground:  0 0% 100%;
+    --sidebar-accent:              220 14% 18%;
+    --sidebar-accent-foreground:   213 20% 88%;
+    --sidebar-border:              220 14% 16%;
+    --sidebar-ring:                217 91% 60%;
+  }
+
+  /* ── Apply smooth colour transitions when switching themes ── */
+  *,
+  *::before,
+  *::after {
+    transition:
+      background-color 200ms ease,
+      border-color     200ms ease,
+      color            150ms ease,
+      box-shadow       200ms ease;
+  }
+
+  /* Disable transition on interactive elements to keep snappy feedback */
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    transition:
+      background-color 120ms ease,
+      border-color     120ms ease,
+      color            100ms ease,
+      box-shadow       120ms ease,
+      opacity          120ms ease;
+  }
+}
+
+/* ============================================================
+   DARK MODE COMPONENT OVERRIDES
+   Fine-tuned adjustments for specific shadcn/ui patterns
+   ============================================================ */
+
+/* ── Scrollbar — dark version ── */
+.dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(220 14% 26%);
+  border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(220 14% 34%);
+}
+
+/* ── Input / textarea — slightly lighter bg so they read as "fields" ── */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark textarea,
+.dark select {
+  background-color: hsl(220 14% 16%);
+  color: hsl(var(--foreground));
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: hsl(215 14% 42%);
+}
+
+/* ── Card shadows — dark backgrounds need subtle glows not harsh shadows ── */
+.dark .shadow-sm  { box-shadow: 0 1px 3px hsl(222 25% 5% / 0.5); }
+.dark .shadow     { box-shadow: 0 2px 8px hsl(222 25% 5% / 0.55); }
+.dark .shadow-md  { box-shadow: 0 4px 16px hsl(222 25% 5% / 0.6); }
+.dark .shadow-lg  { box-shadow: 0 8px 32px hsl(222 25% 5% / 0.65); }
+.dark .shadow-xl  { box-shadow: 0 16px 48px hsl(222 25% 5% / 0.7); }
+.dark .shadow-2xl { box-shadow: 0 24px 64px hsl(222 25% 5% / 0.8); }
+
+/* ── Glassmorphism elements (backdrop-blur areas) ── */
+.dark .bg-background\/80,
+.dark .bg-card\/80,
+.dark .bg-card\/95 {
+  background-color: hsl(222 18% 12% / 0.92) !important;
+  backdrop-filter: blur(12px);
+}
+
+/* ── Gradient backgrounds in admin layout ── */
+.dark .bg-gradient-to-br.from-background.via-background.to-muted\/20 {
+  background: linear-gradient(
+    135deg,
+    hsl(222 18% 11%) 0%,
+    hsl(222 18% 11%) 60%,
+    hsl(220 14% 14%) 100%
+  );
+}
+
+/* ── Admin sidebar gradient header ── */
+.dark .bg-gradient-to-r.from-primary\/5.to-primary\/10 {
+  background: linear-gradient(
+    90deg,
+    hsl(217 91% 60% / 0.08) 0%,
+    hsl(217 91% 60% / 0.04) 100%
+  );
+}
+
+/* ── Chat message bubbles ── */
+.dark .bg-muted.text-foreground.rounded-tl-none {
+  background-color: hsl(220 14% 18%) !important;
+  border: 1px solid hsl(220 14% 23%);
+}
+
+/* ── Provider cards — keep coloured badges vivid on dark ── */
+.dark .bg-blue-100   { background-color: hsl(217 60% 18%) !important; }
+.dark .text-blue-700 { color: hsl(217 80% 70%) !important; }
+
+.dark .bg-violet-100   { background-color: hsl(262 50% 18%) !important; }
+.dark .text-violet-700 { color: hsl(262 70% 75%) !important; }
+
+.dark .bg-amber-100   { background-color: hsl(38 60% 16%) !important; }
+.dark .text-amber-700 { color: hsl(38 80% 65%) !important; }
+
+.dark .bg-rose-100   { background-color: hsl(0 50% 18%) !important; }
+.dark .text-rose-700 { color: hsl(0 70% 72%) !important; }
+
+.dark .bg-emerald-100  { background-color: hsl(152 50% 14%) !important; }
+.dark .text-emerald-700{ color: hsl(152 65% 62%) !important; }
+
+/* Badge colour variants on dark */
+.dark .bg-blue-950\/40   { background-color: hsl(217 60% 15% / 0.7) !important; }
+.dark .bg-violet-950\/40 { background-color: hsl(262 50% 14% / 0.7) !important; }
+.dark .bg-amber-950\/40  { background-color: hsl(38 55% 12% / 0.7) !important; }
+.dark .bg-rose-950\/40   { background-color: hsl(0 50% 14% / 0.7) !important; }
+
+/* ── Location confirmed state ── */
+.dark .border-green-500\/50 { border-color: hsl(142 60% 42% / 0.5) !important; }
+.dark .bg-green-50\/20      { background-color: hsl(142 50% 10% / 0.3) !important; }
+
+/* ── Table zebra striping on dark ── */
+.dark table tbody tr:hover {
+  background-color: hsl(220 14% 17%) !important;
+}
+.dark table thead tr {
+  background-color: hsl(220 14% 15%) !important;
+}
+
+/* ── Toggle / Switch track ── */
+.dark [data-state="unchecked"].peer {
+  background-color: hsl(220 14% 26%);
+}
+
+/* ── Dropdown menu ── */
+.dark [role="menu"],
+.dark [role="listbox"] {
+  background-color: hsl(222 15% 17%);
+  border-color: hsl(220 14% 22%);
+  box-shadow: 0 8px 32px hsl(222 25% 5% / 0.7);
+}
+
+/* ── Toast notifications ── */
+.dark [data-sonner-toast],
+.dark .bg-background.border {
+  background-color: hsl(222 16% 16%) !important;
+  border-color: hsl(220 14% 24%) !important;
+}
+
+/* ── Accent gradient on top bar (provider card) ── */
+.dark .bg-gradient-to-r.from-primary\/60.via-primary\/30.to-transparent {
+  background: linear-gradient(
+    90deg,
+    hsl(217 91% 60% / 0.45) 0%,
+    hsl(217 91% 60% / 0.18) 50%,
+    transparent 100%
+  );
+}
+
+/* ── PDF upload area ── */
+.dark .bg-muted\/50 {
+  background-color: hsl(220 14% 16% / 0.6) !important;
+}
+
+/* ── Letter preview backdrop ── */
+.dark .bg-black\/40 {
+  background-color: hsl(222 30% 4% / 0.75) !important;
+}
+
+/* ── Admin login page blobs ── */
+.dark .bg-primary\/8  { background-color: hsl(217 91% 60% / 0.1); }
+.dark .bg-primary\/6  { background-color: hsl(217 91% 60% / 0.07); }
+.dark .bg-muted\/30   { background-color: hsl(220 14% 18% / 0.35); }
+
+/* ── Focus ring — stays primary colour ── */
+.dark *:focus-visible {
+  outline-color: hsl(var(--ring));
+}
+
+/* ── Gradient backgrounds used in page headers ── */
+.dark .from-primary\/10 { --tw-gradient-from: hsl(217 91% 60% / 0.12); }
+.dark .to-primary\/5   { --tw-gradient-to:   hsl(217 91% 60% / 0.06); }
+
+/* ── Sidebar accent bar when active ── */
+.dark .bg-primary\/10 {
+  background-color: hsl(217 91% 60% / 0.14) !important;
+}
+.dark .border-primary\/20 {
+  border-color: hsl(217 91% 60% / 0.22) !important;
+}
+.dark .hover\:bg-primary\/15:hover {
+  background-color: hsl(217 91% 60% / 0.18) !important;
+}
+
+/* ── Typing cursor ── */
+.dark .bg-primary\/60 {
+  background-color: hsl(217 91% 60% / 0.75) !important;
+}
+
+/* ── White bg on provider card button (chat) — invert on dark ── */
+.dark .bg-white {
+  background-color: hsl(220 14% 20%) !important;
+  color: hsl(var(--foreground)) !important;
+}
+.dark .hover\:bg-gray-50:hover { background-color: hsl(220 14% 24%) !important; }
+.dark .text-gray-900  { color: hsl(213 20% 88%) !important; }
+.dark .text-gray-600  { color: hsl(215 14% 58%) !important; }
+.dark .border-gray-200 { border-color: hsl(220 14% 22%) !important; }
+.dark .border-gray-300 { border-color: hsl(220 14% 26%) !important; }
+
+/* ── Separator ── */
+.dark hr,
+.dark [data-orientation="horizontal"].bg-border {
+  background-color: hsl(220 14% 20%) !important;
+}

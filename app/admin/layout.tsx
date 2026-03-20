@@ -4,6 +4,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -18,6 +19,7 @@ import {
   LayoutDashboard, Settings, Users, Menu, X,
   LogOut, ChevronLeft, Calendar, Shield,
   ChevronRight, PanelLeftClose, PanelLeftOpen,
+  Sun, Moon,
 } from "lucide-react"
 import { Toaster } from "@/components/ui/toaster"
 
@@ -32,9 +34,14 @@ const COLLAPSED_KEY = "admin_sidebar_collapsed"
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { resolvedTheme, setTheme } = useTheme()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
+
+  const isDark = mounted && resolvedTheme === "dark"
+
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark")
 
   useEffect(() => {
     const saved = localStorage.getItem(COLLAPSED_KEY)
@@ -42,7 +49,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setMounted(true)
   }, [])
 
-  // ── If login page — render children only, no shell ──
+  // If login page — render children only, no shell
   if (pathname === "/admin/login") {
     return <>{children}</>
   }
@@ -79,35 +86,60 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {/* Sidebar header */}
             <div className={cn(
               "flex items-center border-b border-border bg-gradient-to-r from-primary/5 to-primary/10 shrink-0 transition-all duration-300",
-              collapsed ? "lg:px-3 lg:py-4 lg:justify-center px-5 py-[18px] justify-between" : "px-5 py-[18px] justify-between",
+              mounted && collapsed ? "lg:px-3 lg:py-4 lg:justify-center px-5 py-[18px] justify-between" : "px-5 py-[18px] justify-between",
             )}>
-              <div className={cn("flex items-center gap-3 overflow-hidden", collapsed && "lg:hidden")}>
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
-                  <Shield className="w-4 h-4 text-primary-foreground" />
-                </div>
-                <span className="font-bold text-base whitespace-nowrap bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                  Admin Panel
-                </span>
-              </div>
 
-              {collapsed && (
-                <div className="hidden lg:flex w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/80 items-center justify-center shadow-md shadow-primary/20">
-                  <Shield className="w-4 h-4 text-primary-foreground" />
-                </div>
+              {/* COLLAPSED (desktop only): logo button = click to expand */}
+              {mounted && collapsed ? (
+                <>
+                  <button
+                    onClick={toggleCollapse}
+                    className="hidden lg:flex items-center justify-center group"
+                    title="Expand sidebar"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md shadow-primary/20 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-primary/30 transition-all duration-200">
+                      <Shield className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                  </button>
+                  {/* Mobile: show full header */}
+                  <div className="flex items-center gap-3 lg:hidden">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
+                      <Shield className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                    <span className="font-bold text-base whitespace-nowrap bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                      Admin Panel
+                    </span>
+                  </div>
+                  <Button variant="ghost" size="icon" className="lg:hidden h-8 w-8" onClick={() => setMobileOpen(false)}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </>
+              ) : (
+                /* EXPANDED: logo + title + collapse button */
+                <>
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
+                      <Shield className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                    <span className="font-bold text-base whitespace-nowrap bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                      Admin Panel
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost" size="icon"
+                      className="hidden lg:flex h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                      onClick={toggleCollapse}
+                    >
+                      <PanelLeftClose className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="lg:hidden h-8 w-8" onClick={() => setMobileOpen(false)}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </>
               )}
 
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost" size="icon"
-                  className="hidden lg:flex h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                  onClick={toggleCollapse}
-                >
-                  {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-                </Button>
-                <Button variant="ghost" size="icon" className="lg:hidden h-8 w-8" onClick={() => setMobileOpen(false)}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
             </div>
 
             {/* Nav */}
@@ -156,15 +188,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               })}
             </nav>
 
+            {/* Expand button — shown only when collapsed, desktop only */}
+            {mounted && collapsed && (
+              <div className="hidden lg:flex justify-center py-2 shrink-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                      onClick={toggleCollapse}
+                    >
+                      <PanelLeftOpen className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Expand sidebar</TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+
             {/* Footer */}
             <div className={cn(
-              "border-t border-border bg-muted/20 shrink-0 transition-all duration-300",
+              "border-t border-border bg-muted/20 shrink-0 transition-all duration-300 flex flex-col gap-1.5",
               collapsed ? "p-2" : "p-3",
             )}>
+              {/* Back to Chat */}
               {collapsed ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link href="/" className="hidden lg:block">
+                    <Link href="/">
                       <Button variant="ghost" size="icon" className="w-full h-10 text-muted-foreground hover:text-foreground">
                         <ChevronLeft className="w-4 h-4" />
                       </Button>
@@ -179,6 +230,53 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     Back to Chat
                   </Button>
                 </Link>
+              )}
+              {/* Theme toggle */}
+              {collapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="w-full h-10 text-muted-foreground hover:text-foreground"
+                      onClick={toggleTheme}
+                    >
+                      {isDark
+                        ? <Sun className="w-4 h-4 text-amber-400" />
+                        : <Moon className="w-4 h-4" />
+                      }
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{isDark ? "Light Mode" : "Dark Mode"}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <button
+                  onClick={toggleTheme}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+                    isDark
+                      ? "bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200",
+                  )}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <span className={cn(
+                      "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
+                      isDark ? "bg-amber-500/20 text-amber-400" : "bg-slate-800/10 text-slate-600",
+                    )}>
+                      {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                    </span>
+                    {isDark ? "Light Mode" : "Dark Mode"}
+                  </span>
+                  <span className={cn(
+                    "relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-300",
+                    isDark ? "bg-primary" : "bg-slate-300",
+                  )}>
+                    <span className={cn(
+                      "inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-300",
+                      isDark ? "translate-x-4" : "translate-x-1",
+                    )} />
+                  </span>
+                </button>
               )}
             </div>
           </aside>
@@ -233,8 +331,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
             </header>
 
-            <main className="p-4 sm:p-6 lg:p-8 xl:px-10 min-h-[calc(100vh-57px)]">
-              <div className="max-w-[1600px] mx-auto">{children}</div>
+            <main className="p-4 xl:px-10 h-[calc(100vh-72px)]">
+              <div className="w-full mx-auto flex flex-col h-full">{children}</div>
             </main>
           </div>
         </div>

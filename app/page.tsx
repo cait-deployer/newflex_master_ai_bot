@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/sidebar'
 import { ChatArea } from '@/components/chat-area'
 import { Menu, X } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { useDarkMode } from '@/hooks/use-dark-mode'
 
 interface Message {
   id: number
@@ -25,9 +26,9 @@ interface Chat {
 }
 
 export default function Home() {
+  const { darkMode, toggleDarkMode } = useDarkMode()
   const [chats, setChats] = useState<Chat[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
-  const [darkMode, setDarkMode] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const selectedChat = chats.find(chat => chat.id === selectedChatId)
@@ -143,6 +144,8 @@ export default function Home() {
           <Sidebar
             chats={chats}
             selectedChatId={selectedChatId}
+            darkMode={darkMode}
+            onToggleDarkMode={toggleDarkMode}
             onSelectChat={(id) => {
               handleSelectChat(id);
               setSidebarOpen(false);
@@ -150,8 +153,6 @@ export default function Home() {
             onDeleteChat={handleDeleteChat}
             onDeleteAllChats={handleDeleteAllChats}
             onNewChat={handleNewChat}
-            darkMode={darkMode}
-            onToggleDarkMode={() => setDarkMode(!darkMode)}
             onClose={() => setSidebarOpen(false)}
             onOpenDeleteDialog={(id) => setConfirmDialog({ isOpen: true, type: 'single', chatId: id })}
             onOpenClearAllDialog={() => setConfirmDialog({ isOpen: true, type: 'all' })}
